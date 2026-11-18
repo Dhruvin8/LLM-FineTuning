@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  mlflow:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/app/mlruns
+      - ./checkpoints:/app/checkpoints
+      - ./logs:/app/logs
+      - ./evaluation_results:/app/evaluation_results
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=sqlite:///mlruns/mlflow.db
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/app/mlruns
+    command: >
+      sh -c "
+        mlflow server 
+        --backend-store-uri sqlite:///mlruns/mlflow.db 
+        --default-artifact-root /app/mlruns 
+        --host 0.0.0.0 
+        --port 5000
+      "
+
+  training:
+    build: .
+    volumes:
+      - ./mlruns:/app/mlruns
+      - ./checkpoints:/app/checkpoints
+      - ./logs:/app/logs
+      - ./evaluation_results:/app/evaluation_results
+      - ./llm_finetuning/configs:/app/llm_finetuning/configs
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    depends_on:
+      - mlflow
+    command: >
+      sh -c "
+        echo 'Training service ready. Use docker-compose exec training python llm_finetuning/train.py --config llm_finetuning/configs/train.yaml'
+      "
+    profiles:
+      - training
+
+  evaluation:
+    build: .
+    volumes:
+      - ./mlruns:/app/mlruns
+      - ./checkpoints:/app/checkpoints
+      - ./logs:/app/logs
+      - ./evaluation_results:/app/evaluation_results
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    depends_on:
+      - mlflow
+    command: >
+      sh -c "
+        echo 'Evaluation service ready. Use docker-compose exec evaluation python llm_finetuning/evaluate.py --model_path checkpoints/best_model'
+      "
+    profiles:
+      - evaluation
